@@ -200,7 +200,7 @@ private struct RouteSessionDetailView: View {
 }
 
 #if os(iOS)
-private struct RouteMapView: View {
+struct RouteMapView: View {
     @ObservedObject var routeTracker: RouteTracker
 
     var body: some View {
@@ -217,7 +217,7 @@ private struct RouteMapView: View {
     }
 }
 
-private struct SavedRouteMapView: View {
+struct SavedRouteMapView: View {
     let route: RouteSession
 
     var body: some View {
@@ -233,7 +233,7 @@ private struct SavedRouteMapView: View {
     }
 }
 #else
-private struct RouteMapView: View {
+struct RouteMapView: View {
     @ObservedObject var routeTracker: RouteTracker
 
     var body: some View {
@@ -246,7 +246,7 @@ private struct RouteMapView: View {
     }
 }
 
-private struct SavedRouteMapView: View {
+struct SavedRouteMapView: View {
     let route: RouteSession
 
     var body: some View {
@@ -259,4 +259,3 @@ private struct SavedRouteMapView: View {
     }
 }
 #endif
-

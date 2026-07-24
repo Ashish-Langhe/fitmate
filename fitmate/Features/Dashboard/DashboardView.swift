@@ -12,17 +12,22 @@ struct DashboardView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        TodayHeader(store: store)
+                        TodayCommandCenter(store: store, routeTracker: routeTracker)
                         DashboardSectionPicker(selectedSection: $selectedSection)
 
                         switch selectedSection {
                         case .overview:
-                            SummaryGrid(store: store)
+                            CyclingDashboardCard(routeTracker: routeTracker)
+                            CoachBriefingCard(store: store, routeTracker: routeTracker)
                             DataSourcesCard(store: store, routeTracker: routeTracker)
-                            GoalProgressCard(store: store)
                             ConsistencyCard(store: store)
                             ActivityDashboard(store: store)
+                        case .cycling:
+                            CyclingDashboardCard(routeTracker: routeTracker)
+                            RangeActivityBreakdownCard(store: store, routeTracker: routeTracker)
+                            GoalSettingsCard(store: store, routeTracker: routeTracker)
                         case .activity:
+                            CyclingDashboardCard(routeTracker: routeTracker)
                             ActivityDashboard(store: store)
                             CalorieBreakdown(store: store)
                             ActivityTimeline(store: store)
@@ -32,6 +37,7 @@ struct DashboardView: View {
                             AnalyticsInsightsCard(store: store)
                             RangeActivityBreakdownCard(store: store, routeTracker: routeTracker)
                         case .routes:
+                            CyclingDashboardCard(routeTracker: routeTracker)
                             RouteTrackingCard(routeTracker: routeTracker)
                             GoalSettingsCard(store: store, routeTracker: routeTracker)
                         }
@@ -67,6 +73,7 @@ struct DashboardView: View {
 
 enum DashboardSection: String, CaseIterable, Identifiable {
     case overview
+    case cycling
     case activity
     case history
     case routes
@@ -77,6 +84,8 @@ enum DashboardSection: String, CaseIterable, Identifiable {
         switch self {
         case .overview:
             return "Overview"
+        case .cycling:
+            return "Cycling"
         case .activity:
             return "Activity"
         case .history:
@@ -85,20 +94,52 @@ enum DashboardSection: String, CaseIterable, Identifiable {
             return "Routes"
         }
     }
+
+    var icon: String {
+        switch self {
+        case .overview:
+            return "gauge.medium"
+        case .cycling:
+            return "bicycle"
+        case .activity:
+            return "figure.run"
+        case .history:
+            return "chart.line.uptrend.xyaxis"
+        case .routes:
+            return "map"
+        }
+    }
 }
 
 struct DashboardSectionPicker: View {
     @Binding var selectedSection: DashboardSection
 
     var body: some View {
-        Picker("Dashboard section", selection: $selectedSection) {
+        HStack(spacing: 8) {
             ForEach(DashboardSection.allCases) { section in
-                Text(section.title).tag(section)
+                Button {
+                    withAnimation(.snappy(duration: 0.22)) {
+                        selectedSection = section
+                    }
+                } label: {
+                    Label(section.title, systemImage: section.icon)
+                        .font(.caption.weight(.bold))
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.74)
+                        .foregroundStyle(selectedSection == section ? .white : AppPalette.ink)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .background(selectedSection == section ? AppPalette.ink : Color.white.opacity(0.62))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
             }
         }
-        .pickerStyle(.segmented)
-        .padding(5)
-        .background(Color.white.opacity(0.78))
+        .padding(6)
+        .background(Color.white.opacity(0.72))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(AppPalette.border, lineWidth: 1)
@@ -137,21 +178,30 @@ struct DashboardBackground: View {
     }
 }
 
-private struct TodayHeader: View {
+private struct TodayCommandCenter: View {
     @ObservedObject var store: FitnessStore
+    @ObservedObject var routeTracker: RouteTracker
+
+    private var goalScore: Double {
+        FitnessMath.goalScore(
+            stepProgress: store.stepProgress,
+            calorieProgress: store.calorieProgress,
+            activeProgress: store.activeProgress
+        )
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                LogoMark(size: 58)
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .center, spacing: 14) {
+                LogoMark(size: 52)
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text("FitMate")
-                        .font(.title3.bold())
+                        .font(.title2.bold())
                         .foregroundStyle(AppPalette.ink)
 
-                    Text("Auto-synced daily fitness")
-                        .font(.caption.weight(.semibold))
+                    Text("Automatic health intelligence")
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppPalette.muted)
                 }
 
@@ -160,44 +210,240 @@ private struct TodayHeader: View {
                 StatusPill(status: store.healthAccessStatus)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Today")
-                    .font(.caption.weight(.bold))
-                    .textCase(.uppercase)
-                    .foregroundStyle(AppPalette.green)
+            HStack(alignment: .center, spacing: 18) {
+                DailyScoreRing(progress: goalScore, valueText: store.goalScoreText)
 
-                Text(store.headline)
-                    .font(.system(size: 36, weight: .black, design: .rounded))
-                    .foregroundStyle(AppPalette.ink)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.72)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Today")
+                        .font(.caption.weight(.bold))
+                        .textCase(.uppercase)
+                        .foregroundStyle(AppPalette.green)
 
-                Text(store.statusMessage)
-                    .font(.callout)
-                    .foregroundStyle(AppPalette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(store.headline)
+                        .font(.system(size: 32, weight: .black, design: .rounded))
+                        .foregroundStyle(AppPalette.ink)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.72)
+
+                    Text(store.goalInsightText)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(AppPalette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            VStack(spacing: 12) {
+                CommandProgressRow(
+                    title: "Move",
+                    value: store.totalCaloriesText,
+                    caption: "\(store.calorieProgressPercent)% of \(store.profile.calorieGoal.formatted()) cal",
+                    icon: "flame.fill",
+                    tint: AppPalette.orange,
+                    progress: store.calorieProgress
+                )
+
+                CommandProgressRow(
+                    title: "Steps",
+                    value: store.steps.formatted(),
+                    caption: "\(store.stepProgressPercent)% of \(store.profile.stepGoal.formatted()) steps",
+                    icon: "shoeprints.fill",
+                    tint: AppPalette.green,
+                    progress: store.stepProgress
+                )
+
+                CommandProgressRow(
+                    title: "Active",
+                    value: store.activeTimeText,
+                    caption: "\(store.activeProgressPercent)% of \(store.profile.activeMinutesGoal)m",
+                    icon: "timer",
+                    tint: AppPalette.blue,
+                    progress: store.activeProgress
+                )
             }
 
             HStack(spacing: 10) {
-                HeroMetric(title: "Steps", value: store.steps.formatted())
-                HeroMetric(title: "Distance", value: store.distanceText)
-                HeroMetric(title: "Active", value: store.activeTimeText)
+                CommandMetric(title: "Distance", value: store.distanceText, icon: "map.fill")
+                CommandMetric(title: "Source", value: store.calorieSourceText.capitalized, icon: "waveform.path.ecg")
+                CommandMetric(title: "Live", value: store.dataReadinessText(locationStatus: routeTracker.locationAccessStatus), icon: "antenna.radiowaves.left.and.right")
+            }
+
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Text("Momentum")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(AppPalette.ink)
+
+                    Spacer()
+
+                    Text(store.currentStreakText)
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .foregroundStyle(AppPalette.muted)
+                }
+
+                HStack(spacing: 6) {
+                    ForEach(store.goalCompletionSummaries.suffix(7)) { day in
+                        MomentumBar(day: day)
+                    }
+                }
             }
         }
-        .padding(20)
+        .padding(22)
         .background(
             LinearGradient(
-                colors: [Color.white, Color(red: 0.91, green: 0.98, blue: 0.95)],
+                colors: [Color.white, Color(red: 0.93, green: 0.97, blue: 0.95), Color(red: 0.91, green: 0.94, blue: 0.97)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(AppPalette.border, lineWidth: 1)
+        .overlay(alignment: .topTrailing) {
+            Rectangle()
+                .fill(AppPalette.green.opacity(0.08))
+                .frame(width: 160, height: 160)
+                .rotationEffect(.degrees(18))
+                .offset(x: 82, y: -80)
         }
+        .elevatedPanel()
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .shadow(color: AppPalette.shadow, radius: 24, x: 0, y: 16)
+    }
+}
+
+private struct DailyScoreRing: View {
+    let progress: Double
+    let valueText: String
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(AppPalette.border.opacity(0.72), lineWidth: 13)
+
+            Circle()
+                .trim(from: 0, to: min(max(progress, 0), 1))
+                .stroke(
+                    LinearGradient(colors: [AppPalette.green, AppPalette.blue], startPoint: .topLeading, endPoint: .bottomTrailing),
+                    style: StrokeStyle(lineWidth: 13, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
+            VStack(spacing: 0) {
+                Text(valueText)
+                    .font(.title2.bold().monospacedDigit())
+                    .foregroundStyle(AppPalette.ink)
+
+                Text("score")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(AppPalette.muted)
+            }
+        }
+        .frame(width: 116, height: 116)
+        .accessibilityLabel("Daily score \(valueText)")
+    }
+}
+
+private struct CommandProgressRow: View {
+    let title: String
+    let value: String
+    let caption: String
+    let icon: String
+    let tint: Color
+    let progress: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.12))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(AppPalette.ink)
+
+                    Spacer()
+
+                    Text(value)
+                        .font(.subheadline.bold().monospacedDigit())
+                        .foregroundStyle(AppPalette.ink)
+                }
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(AppPalette.border.opacity(0.62))
+
+                        Capsule()
+                            .fill(tint)
+                            .frame(width: proxy.size.width * min(max(progress, 0), 1))
+                    }
+                }
+                .frame(height: 8)
+
+                Text(caption)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppPalette.secondaryMuted)
+            }
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct CommandMetric: View {
+    let title: String
+    let value: String
+    let icon: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppPalette.blue)
+
+            Text(value)
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(AppPalette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppPalette.muted)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.68))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct MomentumBar: View {
+    let day: GoalCompletionSummary
+
+    var body: some View {
+        VStack(spacing: 5) {
+            GeometryReader { proxy in
+                ZStack(alignment: .bottom) {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color.white.opacity(0.64))
+
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(day.isTargetHit ? AppPalette.green : AppPalette.blue.opacity(0.42))
+                        .frame(height: max(6, proxy.size.height * min(max(day.score, 0), 1)))
+                }
+            }
+            .frame(height: 46)
+
+            Text(day.shortDayText)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(AppPalette.muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -243,6 +489,93 @@ private struct HeroMetric: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(AppPalette.border, lineWidth: 1)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct CoachBriefingCard: View {
+    @ObservedObject var store: FitnessStore
+    @ObservedObject var routeTracker: RouteTracker
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Coach briefing")
+                        .font(.headline)
+                        .foregroundStyle(AppPalette.ink)
+
+                    Text("What matters next today")
+                        .font(.caption)
+                        .foregroundStyle(AppPalette.muted)
+                }
+
+                Spacer()
+
+                Image(systemName: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(AppPalette.orange)
+            }
+
+            VStack(spacing: 10) {
+                BriefingRow(
+                    title: "Priority",
+                    detail: store.goalInsightText,
+                    icon: "target",
+                    tint: AppPalette.green
+                )
+
+                BriefingRow(
+                    title: "Trend",
+                    detail: store.coachingInsightText,
+                    icon: "chart.line.uptrend.xyaxis",
+                    tint: AppPalette.blue
+                )
+
+                BriefingRow(
+                    title: "Tracking",
+                    detail: "\(store.dataReadinessText(locationStatus: routeTracker.locationAccessStatus)) sources connected. \(store.statusMessage)",
+                    icon: "dot.radiowaves.left.and.right",
+                    tint: AppPalette.purple
+                )
+            }
+        }
+        .padding(18)
+        .sectionCard()
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct BriefingRow: View {
+    let title: String
+    let detail: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.12))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppPalette.ink)
+
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(AppPalette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

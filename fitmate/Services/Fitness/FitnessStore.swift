@@ -108,7 +108,12 @@ final class FitnessStore: ObservableObject {
     }
 
     var goalScoreText: String {
-        "\(Int(((stepProgress + calorieProgress + activeProgress) / 3 * 100).rounded()))%"
+        let score = FitnessMath.goalScore(
+            stepProgress: stepProgress,
+            calorieProgress: calorieProgress,
+            activeProgress: activeProgress
+        )
+        return "\(Int((score * 100).rounded()))%"
     }
 
     var goalInsightText: String {
@@ -176,7 +181,11 @@ final class FitnessStore: ObservableObject {
             let calorieScore = FitnessMath.progress(current: summary.calories, target: Double(profile.calorieGoal))
             let activeMinutes = summary.activeDuration / 60
             let activeScore = FitnessMath.progress(current: activeMinutes, target: Double(profile.activeMinutesGoal))
-            let averageScore = (stepScore + calorieScore + activeScore) / 3
+            let averageScore = FitnessMath.goalScore(
+                stepProgress: stepScore,
+                calorieProgress: calorieScore,
+                activeProgress: activeScore
+            )
             let isTargetHit = stepScore >= 1 || calorieScore >= 1 || activeScore >= 1
 
             return GoalCompletionSummary(date: summary.date, score: averageScore, isTargetHit: isTargetHit)
@@ -697,4 +706,3 @@ final class FitnessStore: ObservableObject {
     private func startStepFallback() {}
 #endif
 }
-
