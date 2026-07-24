@@ -14,6 +14,15 @@ enum FitnessMath {
         max(distanceKilometers, 0) * max(bodyWeightKilograms, 0) * max(multiplier, 0)
     }
 
+    static func speedKilometersPerHour(distanceMeters: Double, durationSeconds: Double) -> Double {
+        guard durationSeconds > 0 else { return 0 }
+        return max(distanceMeters, 0) / 1_000 / (durationSeconds / 3_600)
+    }
+
+    static func estimatedCyclingSteps(distanceMeters: Double) -> Int {
+        Int((max(distanceMeters, 0) * 0.78).rounded())
+    }
+
     static func average(_ values: [Int]) -> Int? {
         guard !values.isEmpty else { return nil }
         return values.reduce(0, +) / values.count

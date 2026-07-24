@@ -24,6 +24,9 @@ struct FitMateCalculationChecks {
 
         let routeCalories = FitnessMath.routeCalories(distanceKilometers: 5, bodyWeightKilograms: 70, multiplier: 0.75)
         expectApproximatelyEqual(routeCalories, 262.5, "route calories should use 0.75 kcal/kg/km")
+        expectApproximatelyEqual(FitnessMath.speedKilometersPerHour(distanceMeters: 10_000, durationSeconds: 1_800), 20, "cycling speed should be kilometers per hour")
+        expect(FitnessMath.speedKilometersPerHour(distanceMeters: 10_000, durationSeconds: 0) == 0, "zero duration should produce zero speed")
+        expect(FitnessMath.estimatedCyclingSteps(distanceMeters: 10_000) == 7_800, "cycling step estimate should use distance-based pedal strokes")
 
         expect(FitnessMath.average([1_000, 3_000, 5_000]) == 3_000, "integer average should be stable")
         expect(FitnessMath.average([120.0, 180.0, 300.0]) == 200, "double average should be stable")
