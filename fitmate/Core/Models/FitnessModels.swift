@@ -554,30 +554,76 @@ struct DailySummary: Identifiable {
     }()
 }
 
+struct RideMetricSample: Identifiable, Codable {
+    let timestamp: Date
+    let elapsedTime: TimeInterval
+    let distanceInMeters: Double
+    let calories: Double
+    let speedKilometersPerHour: Double
+
+    var id: Date { timestamp }
+
+    var timeText: String {
+        timestamp.formatted(date: .omitted, time: .shortened)
+    }
+
+    var caloriesText: String {
+        "\(Int(calories.rounded())) cal"
+    }
+}
+
 struct RouteSession: Identifiable, Codable {
     let id: UUID
     let kind: ActivityKind
     let date: Date
+    let endedAt: Date
     let duration: TimeInterval
     let distanceInMeters: Double
     let calories: Double
+    let averageSpeedKilometersPerHour: Double
+    let maxSpeedKilometersPerHour: Double
+    let breakCount: Int
+    let breakDuration: TimeInterval
+    let cyclingStepCount: Int
+    let samples: [RideMetricSample]
     let points: [RoutePoint]
 
     init(
         id: UUID = UUID(),
         kind: ActivityKind = .walking,
         date: Date,
+        endedAt: Date? = nil,
         duration: TimeInterval,
         distanceInMeters: Double,
         calories: Double,
+        averageSpeedKilometersPerHour: Double? = nil,
+        maxSpeedKilometersPerHour: Double = 0,
+        breakCount: Int = 0,
+        breakDuration: TimeInterval = 0,
+        cyclingStepCount: Int? = nil,
+        samples: [RideMetricSample]? = nil,
         points: [RoutePoint]
     ) {
         self.id = id
         self.kind = kind
         self.date = date
+        self.endedAt = endedAt ?? date.addingTimeInterval(duration)
         self.duration = duration
         self.distanceInMeters = distanceInMeters
         self.calories = calories
+        self.averageSpeedKilometersPerHour = averageSpeedKilometersPerHour ?? FitnessMath.speedKilometersPerHour(distanceMeters: distanceInMeters, durationSeconds: duration)
+        self.maxSpeedKilometersPerHour = maxSpeedKilometersPerHour
+        self.breakCount = breakCount
+        self.breakDuration = breakDuration
+        self.cyclingStepCount = cyclingStepCount ?? (kind == .cycling ? FitnessMath.estimatedCyclingSteps(distanceMeters: distanceInMeters) : 0)
+        self.samples = samples ?? Self.defaultSamples(
+            start: date,
+            end: endedAt ?? date.addingTimeInterval(duration),
+            duration: duration,
+            distanceInMeters: distanceInMeters,
+            calories: calories,
+            averageSpeedKilometersPerHour: averageSpeedKilometersPerHour ?? FitnessMath.speedKilometersPerHour(distanceMeters: distanceInMeters, durationSeconds: duration)
+        )
         self.points = points
     }
 
@@ -603,8 +649,37 @@ struct RouteSession: Identifiable, Codable {
         return "\(remainingSeconds)s"
     }
 
+    var startTimeText: String {
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
+    var endTimeText: String {
+        endedAt.formatted(date: .omitted, time: .shortened)
+    }
+
     var caloriesText: String {
         "\(Int(calories.rounded())) cal"
+    }
+
+    var averageSpeedText: String {
+        averageSpeedKilometersPerHour.formatted(.number.precision(.fractionLength(1))) + " km/h"
+    }
+
+    var maxSpeedText: String {
+        maxSpeedKilometersPerHour.formatted(.number.precision(.fractionLength(1))) + " km/h"
+    }
+
+    var breakCountText: String {
+        breakCount == 1 ? "1 break" : "\(breakCount) breaks"
+    }
+
+    var breakDurationText: String {
+        let minutes = Int((breakDuration / 60).rounded())
+        return minutes == 1 ? "1m" : "\(minutes)m"
+    }
+
+    var cyclingStepCountText: String {
+        cyclingStepCount.formatted()
     }
 
     var pointCountText: String {
@@ -647,21 +722,67 @@ struct RouteSession: Identifiable, Codable {
         case id
         case kind
         case date
+        case endedAt
         case duration
         case distanceInMeters
         case calories
+        case averageSpeedKilometersPerHour
+        case maxSpeedKilometersPerHour
+        case breakCount
+        case breakDuration
+        case cyclingStepCount
+        case samples
         case points
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedKind = try container.decodeIfPresent(ActivityKind.self, forKey: .kind) ?? .walking
+        let decodedDate = try container.decode(Date.self, forKey: .date)
+        let decodedDuration = try container.decode(TimeInterval.self, forKey: .duration)
+        let decodedDistance = try container.decode(Double.self, forKey: .distanceInMeters)
+
         self.id = try container.decode(UUID.self, forKey: .id)
-        self.kind = try container.decodeIfPresent(ActivityKind.self, forKey: .kind) ?? .walking
-        self.date = try container.decode(Date.self, forKey: .date)
-        self.duration = try container.decode(TimeInterval.self, forKey: .duration)
-        self.distanceInMeters = try container.decode(Double.self, forKey: .distanceInMeters)
+        self.kind = decodedKind
+        self.date = decodedDate
+        self.duration = decodedDuration
+        self.endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt) ?? decodedDate.addingTimeInterval(decodedDuration)
+        self.distanceInMeters = decodedDistance
         self.calories = try container.decode(Double.self, forKey: .calories)
+        self.averageSpeedKilometersPerHour = try container.decodeIfPresent(Double.self, forKey: .averageSpeedKilometersPerHour) ?? FitnessMath.speedKilometersPerHour(distanceMeters: decodedDistance, durationSeconds: decodedDuration)
+        self.maxSpeedKilometersPerHour = try container.decodeIfPresent(Double.self, forKey: .maxSpeedKilometersPerHour) ?? 0
+        self.breakCount = try container.decodeIfPresent(Int.self, forKey: .breakCount) ?? 0
+        self.breakDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .breakDuration) ?? 0
+        self.cyclingStepCount = try container.decodeIfPresent(Int.self, forKey: .cyclingStepCount) ?? (decodedKind == .cycling ? FitnessMath.estimatedCyclingSteps(distanceMeters: decodedDistance) : 0)
+        self.samples = try container.decodeIfPresent([RideMetricSample].self, forKey: .samples) ?? Self.defaultSamples(
+            start: decodedDate,
+            end: try container.decodeIfPresent(Date.self, forKey: .endedAt) ?? decodedDate.addingTimeInterval(decodedDuration),
+            duration: decodedDuration,
+            distanceInMeters: decodedDistance,
+            calories: try container.decode(Double.self, forKey: .calories),
+            averageSpeedKilometersPerHour: FitnessMath.speedKilometersPerHour(distanceMeters: decodedDistance, durationSeconds: decodedDuration)
+        )
         self.points = try container.decode([RoutePoint].self, forKey: .points)
+    }
+
+    private static func defaultSamples(
+        start: Date,
+        end: Date,
+        duration: TimeInterval,
+        distanceInMeters: Double,
+        calories: Double,
+        averageSpeedKilometersPerHour: Double
+    ) -> [RideMetricSample] {
+        [
+            RideMetricSample(timestamp: start, elapsedTime: 0, distanceInMeters: 0, calories: 0, speedKilometersPerHour: 0),
+            RideMetricSample(
+                timestamp: end,
+                elapsedTime: duration,
+                distanceInMeters: distanceInMeters,
+                calories: calories,
+                speedKilometersPerHour: averageSpeedKilometersPerHour
+            )
+        ]
     }
 
     static let preview: [RouteSession] = [
@@ -674,6 +795,23 @@ struct RouteSession: Identifiable, Codable {
             points: [
                 RoutePoint(latitude: 19.0760, longitude: 72.8777),
                 RoutePoint(latitude: 19.0782, longitude: 72.8791)
+            ]
+        ),
+        RouteSession(
+            kind: .cycling,
+            date: Date().addingTimeInterval(-8_400),
+            duration: 2_940,
+            distanceInMeters: 14_600,
+            calories: 326,
+            averageSpeedKilometersPerHour: 17.9,
+            maxSpeedKilometersPerHour: 31.4,
+            breakCount: 2,
+            breakDuration: 310,
+            cyclingStepCount: 11_388,
+            points: [
+                RoutePoint(latitude: 19.0820, longitude: 72.8751),
+                RoutePoint(latitude: 19.0890, longitude: 72.8818),
+                RoutePoint(latitude: 19.0962, longitude: 72.8892)
             ]
         )
     ]
