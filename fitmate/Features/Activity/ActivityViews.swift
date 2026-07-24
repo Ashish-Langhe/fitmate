@@ -4,25 +4,40 @@ struct ActivityDashboard: View {
     @ObservedObject var store: FitnessStore
 
     private let trackedKinds: [ActivityKind] = [.walking, .running, .cycling, .jumpingJacks]
+    private var summaries: [ActivitySummary] {
+        trackedKinds.map { store.summary(for: $0) }
+    }
+
+    private var maxCalories: Double {
+        max(summaries.map(\.calories).max() ?? 1, 1)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Activity dashboards")
+                    Text("Activity intelligence")
                         .font(.headline)
                         .foregroundStyle(AppPalette.ink)
 
-                    Text("Auto-detected calories by movement type")
+                    Text("Auto-classified burn by movement type")
                         .font(.caption)
                         .foregroundStyle(AppPalette.muted)
                 }
                 Spacer()
+
+                Text(store.totalCaloriesText)
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(AppPalette.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.white.opacity(0.78))
+                    .clipShape(Capsule())
             }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(trackedKinds) { kind in
-                    ActivityDashboardTile(kind: kind, summary: store.summary(for: kind))
+            VStack(spacing: 10) {
+                ForEach(summaries, id: \.kind) { summary in
+                    ActivityDashboardRow(summary: summary, maxCalories: maxCalories)
                 }
             }
         }
@@ -32,58 +47,73 @@ struct ActivityDashboard: View {
     }
 }
 
-private struct ActivityDashboardTile: View {
-    let kind: ActivityKind
+private struct ActivityDashboardRow: View {
     let summary: ActivitySummary
+    let maxCalories: Double
+
+    private var progress: Double {
+        FitnessMath.progress(current: summary.calories, target: maxCalories)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                ZStack {
-                    Circle()
-                        .fill(kind.tint.opacity(0.16))
-                        .frame(width: 38, height: 38)
+        HStack(spacing: 13) {
+            ZStack {
+                Circle()
+                    .fill(summary.kind.tint.opacity(0.14))
+                    .frame(width: 44, height: 44)
 
-                    Image(systemName: kind.icon)
-                        .font(.headline)
-                        .foregroundStyle(kind.tint)
-                }
-
-                Spacer()
-
-                Text(summary.sessionCountText)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(kind.tint)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(kind.tint.opacity(0.12))
-                    .clipShape(Capsule())
+                Image(systemName: summary.kind.icon)
+                    .font(.headline)
+                    .foregroundStyle(summary.kind.tint)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(kind.dashboardTitle)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(AppPalette.ink)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(summary.kind.dashboardTitle)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(AppPalette.ink)
 
-                Text(summary.caloriesText)
-                    .font(.title3.bold().monospacedDigit())
-                    .foregroundStyle(AppPalette.ink)
+                        Text(summary.detailText)
+                            .font(.caption)
+                            .foregroundStyle(AppPalette.muted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                    }
 
-                Text(summary.detailText)
-                    .font(.caption)
-                    .foregroundStyle(AppPalette.muted)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text(summary.caloriesText)
+                            .font(.headline.bold().monospacedDigit())
+                            .foregroundStyle(AppPalette.ink)
+
+                        Text(summary.sessionCountText)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(summary.kind.tint)
+                    }
+                }
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(AppPalette.border.opacity(0.58))
+
+                        Capsule()
+                            .fill(summary.kind.tint)
+                            .frame(width: proxy.size.width * progress)
+                    }
+                }
+                .frame(height: 8)
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 154, alignment: .topLeading)
-        .background(Color.white.opacity(0.82))
+        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+        .background(Color.white.opacity(0.76))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(kind.tint.opacity(0.18), lineWidth: 1)
+                .stroke(summary.kind.tint.opacity(0.16), lineWidth: 1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
-
